@@ -47,6 +47,8 @@ _deps
 /bin*
 include/vendored/*
 !include/vendored/vendored.cmake
+/build
+/build/*
 ### CMake Patch ###
 CMakeUserPresets.json
 
