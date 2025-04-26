@@ -49,6 +49,13 @@ struct AppState {
     // Main window dimensions
     int mainWindowWidth = SCREEN_WIDTH;
     int mainWindowHeight = SCREEN_HEIGHT;
+
+    //File browser dimensions
+    float filebrowserWidth = SCREEN_WIDTH*0.4f;
+    float filebrowserHeight = SCREEN_HEIGHT*0.6f;
+    bool filebrowserresize = false;
+    float filebrowser_ratio_width = filebrowserWidth / mainWindowWidth;
+    float filebrowser_ratio_height = filebrowserHeight / mainWindowHeight;
 };
 
 // A simple helper function that logs that a critical failure happens and
@@ -95,14 +102,28 @@ void populate_directory_contents(AppState* state) {
 }
 
 void FileBrowserUI(AppState* state) {
-    // Calculate dynamic size for the file browser
-    float fileBrowserWidth = state->mainWindowWidth * 0.3f;  // 30% of the window width
-    float fileBrowserHeight = state->mainWindowHeight * 0.5f; // 50% of the window height
-
-    ImGui::Begin("File Browser", nullptr, ImGuiWindowFlags_NoMove);
+    // Initialise the window
+    ImGui::Begin("File Browser", nullptr);
     ImGui::SetWindowPos(ImVec2(0, 0));
-    ImGui::SetWindowSize(ImVec2(fileBrowserWidth, fileBrowserHeight)); //, ImGuiCond_FirstUseEver for resizing to stay
+    
+    // Check if the window size has changed
+    ImVec2 currentSize = ImGui::GetWindowSize();
+    if (currentSize.x != state->filebrowserWidth && currentSize.y != state->filebrowserHeight) {
+        state->filebrowserresize = true;
+    }
 
+    // Allowing user resize
+    if (state->filebrowserresize){
+        ImGui::SetWindowSize(ImVec2(state->mainWindowWidth*state->filebrowser_ratio_width, state->mainWindowHeight*state->filebrowser_ratio_height), ImGuiCond_Always);
+    }
+
+    else{
+        ImGui::SetWindowSize(ImVec2(state->filebrowserWidth, state->filebrowserHeight));
+    }
+
+    // Set the window size to the new dimensions
+
+    //Go Back button
     if (ImGui::Button("Go Back")) {
         fs::path current_path = state->current_directory;
         if (current_path.has_parent_path()) {
@@ -267,6 +288,10 @@ SDL_AppResult SDL_AppEvent(void *appState, SDL_Event *event) {
 
         state->mainWindowWidth = newWidth;  // Add this to AppState
         state->mainWindowHeight = newHeight; // Add this to AppState
+        state->filebrowser_ratio_height = state->filebrowserHeight / newHeight;
+        state->filebrowser_ratio_width = state->filebrowserWidth / newWidth;
+        state->filebrowserWidth = newWidth * 0.4f;
+        state->filebrowserHeight = newHeight * 0.6f;
     }
     else if (event->type == SDL_EVENT_KEY_DOWN) {
         SDL_Log("Key pressed: %c", event->key.key);
