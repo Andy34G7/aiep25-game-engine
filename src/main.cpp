@@ -2,9 +2,6 @@
 #include <SDL3/SDL_main.h>
 #include <SDL3_ttf/SDL_ttf.h>
 #include <stdio.h> 
-#define IMGUI_ENABLE_DOCKING
-#define IMGUI_DEFINE_MATH_OPERATORS
-#define IMGUI_IMPL_API
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_sdlrenderer3.h>
