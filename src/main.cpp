@@ -55,6 +55,12 @@ struct AppState {
     // Main window dimensions
     int mainWindowWidth = SCREEN_WIDTH;
     int mainWindowHeight = SCREEN_HEIGHT;
+    //File browser dimensions
+    float filebrowserWidth = SCREEN_WIDTH*0.4f;
+    float filebrowserHeight = SCREEN_HEIGHT*0.6f;
+    bool mainwindowresize = false;
+    float filebrowser_ratio_width = 0.4f;
+    float filebrowser_ratio_height = 0.6f;
 };
 
 // A simple helper function that logs that a critical failure happens and
@@ -101,52 +107,108 @@ void populate_directory_contents(AppState* state) {
 }
 
 void FileBrowserUI(AppState* state) {
-    // Calculate dynamic size for the file browser
-    float fileBrowserWidth = state->mainWindowWidth * 0.3f;  // 30% of the window width
-    float fileBrowserHeight = state->mainWindowHeight * 0.5f; // 50% of the window height
-
-    ImGui::Begin("File Browser", nullptr, ImGuiWindowFlags_NoMove);
-    ImGui::SetWindowPos(ImVec2(0, 0));
-    ImGui::SetWindowSize(ImVec2(fileBrowserWidth, fileBrowserHeight)); //, ImGuiCond_FirstUseEver for resizing to stay
-
-    if (ImGui::Button("Go Back")) {
-        fs::path current_path = state->current_directory;
-        if (current_path.has_parent_path()) {
-            state->current_directory = current_path.parent_path().string();
-            populate_directory_contents(state);
-        }
+    // Initialise the window
+    bool filebrowser_isopen = ImGui::Begin("File Browser", nullptr, ImGuiWindowFlags_NoCollapse);
+    
+    //Check for resizing
+    if(state->mainwindowresize) {
+        ImGui::SetWindowSize(ImVec2(state->filebrowserWidth, state->filebrowserHeight), ImGuiCond_Always);
+        state->mainwindowresize = false;
     }
-    ImGui::Text("%s", state->current_directory.c_str());
+    else {
+        ImGui::SetWindowSize(ImVec2(state->filebrowserWidth, state->filebrowserHeight), ImGuiCond_FirstUseEver);
+        ImGui::SetWindowPos(ImVec2(0,0), ImGuiCond_FirstUseEver);
+    }
+    
+    //Set window size constraints
+    ImGui::SetNextWindowSizeConstraints(ImVec2(50, 50), ImVec2(FLT_MAX, FLT_MAX));
+    //check for manual sizing
+    if(filebrowser_isopen){
+        ImVec2 currentSize = ImGui::GetWindowSize();
+        bool user_resize = false;
+        
+        //check beyond very small change
+        const float threshold = 0.1f;
+        if (fabs(currentSize.x - state->filebrowserWidth) > threshold ||
+            fabs(currentSize.y - state->filebrowserHeight) > threshold) {
+            user_resize = true;
+            state->filebrowserWidth = currentSize.x;
+            state->filebrowserHeight = currentSize.y;
+            //Update ratio
+            state->filebrowser_ratio_width = currentSize.x / (float)state->mainWindowWidth;
+            state->filebrowser_ratio_height = currentSize.y / (float)state->mainWindowHeight;
+        }
 
-    if (ImGui::BeginListBox("Contents", ImVec2(-FLT_MIN, -FLT_MIN))) {
-        std::string selected_directory_path; // Capture the path here
+    }
 
-        for (const auto& entry : state->directory_contents) {
-            std::string filename = entry.path().filename().string();
-            std::string label = filename + "##" + entry.path().string();
-            if (ImGui::Selectable(label.c_str())) {
-                if (entry.is_directory()) {
-                    selected_directory_path = entry.path().string(); // Store the path
-                } else if (entry.is_regular_file()) {
-                    std::cout << "Opening file: " << entry.path() << std::endl;
-                    OpenFile(entry.path().string());
+    // UI elements
+
+        //Go Back button
+        if (ImGui::Button("Go Back")) {
+            fs::path current_path = state->current_directory;
+            if (current_path.has_parent_path()) {
+                // Check if parent path is different before navigating
+                fs::path parent_path = current_path.parent_path();
+                if (parent_path != current_path) { // Avoid getting stuck at root
+                     state->current_directory = parent_path.string();
+                     populate_directory_contents(state);
                 }
             }
         }
-        // Process the selected directory *after* the loop
-        if (!selected_directory_path.empty()) {
-            try {
-                state->current_directory = selected_directory_path;
-                populate_directory_contents(state);
-            } catch (const fs::filesystem_error& e) {
-                std::cerr << "Error accessing directory: " << e.what() << std::endl;
-            }
+        ImGui::SameLine(); 
+        ImGui::TextWrapped("Current: %s", state->current_directory.c_str()); // Use TextWrapped for long paths
+        ImGui::Separator(); // to make visual separation
+
+        // Child Object to make listbox occupy the whole window
+        if (ImGui::BeginChild("FileListRegion", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar)) { // Use 0,0 to fill space, add border, scrollbar
+             
+            std::string selected_directory_path; // Capture path
+
+             for (const auto& entry : state->directory_contents) {
+                  std::string filename = entry.path().filename().string();
+                  std::string label; // Construct label with icon (optional)
+
+                  if (entry.is_directory()) {
+                       label = "[D] " + filename; // Simple indicator for directory
+                  } else if (entry.is_regular_file()) {
+                       label = "[F] " + filename; // Simple indicator for file
+                  } else {
+                       label = "[?] " + filename; // Unknown type
+                  }
+                  label += "##" + entry.path().string(); // Unique ID for ImGui using full path
+
+                  if (ImGui::Selectable(label.c_str())) {
+                       if (entry.is_directory()) {
+                            selected_directory_path = entry.path().string(); // Store the path for processing after loop
+                       } else if (entry.is_regular_file()) {
+                            std::cout << "Opening file: " << entry.path() << std::endl;
+                            OpenFile(entry.path().string());
+                       }
+                  }
+             }
+             // Process the selected directory after the loop to avoid modifying the list while iterating
+             if (!selected_directory_path.empty()) {
+                  try {
+                       // Check to avoid issues if directory was deleted or moved
+                       if (fs::exists(selected_directory_path) && fs::is_directory(selected_directory_path)) {
+                            state->current_directory = selected_directory_path;
+                            populate_directory_contents(state);
+                       } else {
+                            std::cerr << "Selected path no longer exists or is not a directory: " << selected_directory_path << std::endl;
+                            //re-populate current directory contents to refresh view
+                            populate_directory_contents(state);
+                       }
+                  } catch (const fs::filesystem_error& e) {
+                       std::cerr << "Error accessing directory: " << e.what() << std::endl;
+                       // Attempt to revert or handle error gracefully
+                       // Maybe revert to parent? Or just log error.
+                       // For now, just log and potentially refresh
+                       populate_directory_contents(state);
+                  }
+             }
         }
-
-        ImGui::EndListBox();
-    }
-
-    ImGui::End();
+        ImGui::EndChild(); // End FileListRegion
+    ImGui::End(); // End File Browser window
 }
 
 // Initialises subsystems and initialises appState to be used by all other main
