@@ -49,6 +49,8 @@ include/vendored/*
 !include/vendored/vendored.cmake
 /build
 /build/*
+/build/imgui-subuild
+/build/imgui-subuild/*
 ### CMake Patch ###
 CMakeUserPresets.json
 
