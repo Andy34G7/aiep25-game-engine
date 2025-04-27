@@ -53,9 +53,9 @@ struct AppState {
     //File browser dimensions
     float filebrowserWidth = SCREEN_WIDTH*0.4f;
     float filebrowserHeight = SCREEN_HEIGHT*0.6f;
-    bool filebrowserresize = false;
-    float filebrowser_ratio_width = filebrowserWidth / mainWindowWidth;
-    float filebrowser_ratio_height = filebrowserHeight / mainWindowHeight;
+    bool mainwindowresize = false;
+    float filebrowser_ratio_width = 0.4f;
+    float filebrowser_ratio_height = 0.6f;
 };
 
 // A simple helper function that logs that a critical failure happens and
@@ -102,26 +102,41 @@ void populate_directory_contents(AppState* state) {
 }
 
 void FileBrowserUI(AppState* state) {
-    // Initialise the window
-    ImGui::Begin("File Browser", nullptr);
-    ImGui::SetWindowPos(ImVec2(0, 0));
     
-    // Check if the window size has changed
-    ImVec2 currentSize = ImGui::GetWindowSize();
-    if (currentSize.x != state->filebrowserWidth && currentSize.y != state->filebrowserHeight) {
-        state->filebrowserresize = true;
+    // Initialise the window
+    bool filebrowser_isopen = ImGui::Begin("File Browser", nullptr, ImGuiWindowFlags_NoCollapse);
+    
+    //Check for resizing
+    if(state->mainwindowresize) {
+        ImGui::SetWindowSize(ImVec2(state->filebrowserWidth, state->filebrowserHeight), ImGuiCond_Always);
+        state->mainwindowresize = false;
     }
-
-    // Allowing user resize
-    if (state->filebrowserresize){
-        ImGui::SetWindowSize(ImVec2(state->mainWindowWidth*state->filebrowser_ratio_width, state->mainWindowHeight*state->filebrowser_ratio_height), ImGuiCond_Always);
+    else {
+        ImGui::SetWindowSize(ImVec2(state->filebrowserWidth, state->filebrowserHeight), ImGuiCond_FirstUseEver);
+        ImGui::SetWindowPos(ImVec2(0,0), ImGuiCond_FirstUseEver);
     }
+    
+    //Set window size constraints
+    ImGui::SetNextWindowSizeConstraints(ImVec2(50, 50), ImVec2(FLT_MAX, FLT_MAX));
 
-    else{
-        ImGui::SetWindowSize(ImVec2(state->filebrowserWidth, state->filebrowserHeight));
+    //check for manual sizing
+    if(filebrowser_isopen){
+        ImVec2 currentSize = ImGui::GetWindowSize();
+        bool user_resize = false;
+        
+        //check beyond very small change
+        const float threshold = 0.1f;
+        if (fabs(currentSize.x - state->filebrowserWidth) > threshold ||
+            fabs(currentSize.y - state->filebrowserHeight) > threshold) {
+            user_resize = true;
+            state->filebrowserWidth = currentSize.x;
+            state->filebrowserHeight = currentSize.y;
+            //Update ratio
+            state->filebrowser_ratio_width = currentSize.x / (float)state->mainWindowWidth;
+            state->filebrowser_ratio_height = currentSize.y / (float)state->mainWindowHeight;
+        }
+        
     }
-
-    // Set the window size to the new dimensions
 
     //Go Back button
     if (ImGui::Button("Go Back")) {
@@ -288,10 +303,17 @@ SDL_AppResult SDL_AppEvent(void *appState, SDL_Event *event) {
 
         state->mainWindowWidth = newWidth;  // Add this to AppState
         state->mainWindowHeight = newHeight; // Add this to AppState
-        state->filebrowser_ratio_height = state->filebrowserHeight / newHeight;
-        state->filebrowser_ratio_width = state->filebrowserWidth / newWidth;
-        state->filebrowserWidth = newWidth * 0.4f;
-        state->filebrowserHeight = newHeight * 0.6f;
+
+        // Update file broswer size based on new window size
+        state->filebrowserWidth = (float)state->mainWindowWidth * state->filebrowser_ratio_width;
+        state->filebrowserHeight = (float)state->mainWindowHeight * state->filebrowser_ratio_height;
+
+        //add minimum size conditions
+        if (state->filebrowserWidth < 50.0f) state->filebrowserWidth = 50.0f;
+        if (state->filebrowserHeight < 50.0f) state->filebrowserHeight = 50.0f;
+
+        // Update flag
+        state->mainwindowresize = true;
     }
     else if (event->type == SDL_EVENT_KEY_DOWN) {
         SDL_Log("Key pressed: %c", event->key.key);
