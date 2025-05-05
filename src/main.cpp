@@ -3,6 +3,8 @@
 #include <SDL3/SDL_main.h>
 #include <engine/engine.hpp>
 #include <memory>
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/basic_file_sink.h>
 
 // Used in this example to keep track of selected object
 static int s_currentRect = 1;
@@ -37,15 +39,21 @@ SDL_AppResult SDL_AppInit(void **appState, int argc, char *argv[]) {
     /*
     gameEngine->GetEvents().RegisterCallback(
         Engine::EventType::KeyDown, [](Engine::EventData data) {
-            SDL_Log("Key pressed: %u (keycode)", data.keyboard.keycode);
-            SDL_Log("Key pressed: %u (scancode)", data.keyboard.scancode);
-            SDL_Log("Key pressed modifiers: %u", data.keyboard.modifiers);
+            // SDL_Log("Key pressed: %u (keycode)", data.keyboard.keycode);
+            // SDL_Log("Key pressed: %u (scancode)", data.keyboard.scancode);
+            // SDL_Log("Key pressed modifiers: %u", data.keyboard.modifiers);
+            spdlog::info("Key pressed: {} (keycode)", static_cast<unsigned int>(data.keyboard.keycode));
+            spdlog::info("Key pressed: {} (scancode)", static_cast<unsigned int>(data.keyboard.scancode));
+            spdlog::info("Key pressed modifiers: {}", data.keyboard.modifiers);
         });
     gameEngine->GetEvents().RegisterCallback(
         Engine::EventType::KeyUp, [](Engine::EventData data) {
-            SDL_Log("Key released: %u (keycode)", data.keyboard.keycode);
-            SDL_Log("Key released: %u (scancode)", data.keyboard.scancode);
-            SDL_Log("Key released modifiers: %u", data.keyboard.modifiers);
+            // SDL_Log("Key released: %u (keycode)", data.keyboard.keycode);
+            // SDL_Log("Key released: %u (scancode)", data.keyboard.scancode);
+            // SDL_Log("Key released modifiers: %u", data.keyboard.modifiers);
+            spdlog::info("Key released: {} (keycode)", static_cast<unsigned int>(data.keyboard.keycode));
+            spdlog::info("Key released: {} (scancode)", static_cast<unsigned int>(data.keyboard.scancode));
+            spdlog::info("Key released modifiers: {}", data.keyboard.modifiers);
         });
     */
     gameEngine->GetEvents().RegisterCallback(
