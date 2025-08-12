@@ -2,6 +2,11 @@
 #include <SDL3/SDL_main.h>
 #include <engine/engine.hpp>
 #include <engine/logger.hpp>
+#include <engine/file-browser.hpp>
+
+// Initialise file browser instance and state
+Engine::FileBrowser fileBrowser;
+Engine::FileBrowserState fileBrowserState;
 
 // Initialises subsystems and initialises appState to be used by all other main
 // functions.
@@ -30,6 +35,9 @@ SDL_AppResult SDL_AppInit(void **appState, int argc, char *argv[]) {
                         data.window.height);
             gameEngine->GetWindow().SetDimensions(data.window.width,
                                                   data.window.height);
+            
+            // Update file browser state on window resize
+            fileBrowser.UpdateOnWindowResize(fileBrowserState, data.window.width, data.window.height);
         });
     gameEngine->GetEvents().RegisterCallback(
         Engine::EventType::KeyDown, [](Engine::EventData data) {
@@ -63,6 +71,19 @@ SDL_AppResult SDL_AppInit(void **appState, int argc, char *argv[]) {
                         data.mouse.y);
         });
 
+    SPDLOG_INFO("Initializing file browser.");
+    fileBrowser.Initialize();
+    
+    fileBrowser.InitializeImGui(
+        gameEngine->GetWindow().GetSDLWindow(),
+        gameEngine->GetRenderer().GetSDLRenderer()
+    );
+    
+    fileBrowserState.main_window_width = 1000;
+    fileBrowserState.main_window_height = 800;
+    
+    // Populate initial directory contents
+
     SPDLOG_INFO("Application initialized successfully.");
     *appState = gameEngine;
     return SDL_APP_CONTINUE;
@@ -73,6 +94,11 @@ SDL_AppResult SDL_AppInit(void **appState, int argc, char *argv[]) {
 //       custom event handling to be added by a user.
 SDL_AppResult SDL_AppEvent(void *appState, SDL_Event *event) {
     Engine::Engine *gameEngine = static_cast<Engine::Engine *>(appState);
+    
+    // Process ImGui events for the file browser
+    extern Engine::FileBrowser fileBrowser;
+    fileBrowser.ProcessEvent(event);
+    
     if (event->type == SDL_EVENT_QUIT || event->type == SDL_EVENT_TERMINATING) {
         SPDLOG_INFO("Received SDL_EVENT_QUIT or SDL_EVENT_TERMINATING. Exiting "
                     "application.");
@@ -95,6 +121,8 @@ SDL_AppResult SDL_AppIterate(void *appState) {
     SPDLOG_DEBUG("Rendering all objects.");
     gameEngine->GetRenderManager().RenderAll(gameEngine->GetRenderer());
 
+    fileBrowser.Render(fileBrowserState);
+
     SPDLOG_DEBUG("Presenting rendered frame.");
     gameEngine->GetRenderer().Present();
 
@@ -107,6 +135,9 @@ void SDL_AppQuit(void *appState, SDL_AppResult result) {
     Engine::Engine *gameEngine = static_cast<Engine::Engine *>(appState);
     if (gameEngine != nullptr) {
         SPDLOG_INFO("Shutting down game engine.");
+        
+        fileBrowser.ShutdownImGui();
+        
         gameEngine->Shutdown();
         SPDLOG_INFO("Game engine shutdown completed.");
     } else {
