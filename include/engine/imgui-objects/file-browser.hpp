@@ -1,7 +1,7 @@
 #pragma once
-#include <vector>
-#include <string>
 #include <filesystem>
+#include <string>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -20,14 +20,14 @@ struct FileBrowserState {
 };
 
 class FileBrowser {
-public:
+  public:
     void Initialize();
-    void UpdateOnWindowResize(FileBrowserState& state, int w, int h);
-    void Render(FileBrowserState& state);
+    void UpdateOnWindowResize(FileBrowserState &state, int w, int h);
+    void Render(FileBrowserState &state);
 
-private:
-    void PopulateDirectoryContents(FileBrowserState& state);
-    void OpenFile(const std::string& path);
+  private:
+    void PopulateDirectoryContents(FileBrowserState &state);
+    void OpenFile(const std::string &path);
 };
 
 } // namespace Engine

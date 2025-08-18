@@ -31,6 +31,13 @@ void ImGuiRender::ShutDown() {
     m_initialized = false;
 }
 
+void ImGuiRender::BeginFrame() {
+    if (!m_initialized) return;
+    ImGui_ImplSDL3_NewFrame();
+    ImGui_ImplSDLRenderer3_NewFrame();
+    ImGui::NewFrame();
+}
+
 void ImGuiRender::EndFrame() {
     if (!m_initialized)
         return;

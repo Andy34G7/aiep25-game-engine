@@ -1,12 +1,15 @@
 #include <SDL3/SDL_keycode.h>
 #include <SDL3/SDL_main.h>
 #include <engine/engine.hpp>
-#include <engine/file-browser.hpp>
+#include <engine/imgui-objects/file-browser.hpp>
+#include <engine/imgui-objects/top-bar.hpp>
+#include <engine/imgui-render.hpp>
 #include <engine/logger.hpp>
 
 // Initialise file browser instance and state
 Engine::FileBrowser fileBrowser;
 Engine::FileBrowserState fileBrowserState;
+static Engine::ImGuiRender g_ImGui;
 
 // Initialises subsystems and initialises appState to be used by all other main
 // functions.
@@ -75,11 +78,11 @@ SDL_AppResult SDL_AppInit(void **appState, int argc, char *argv[]) {
     SPDLOG_INFO("Initializing file browser.");
     fileBrowser.Initialize();
 
-    fileBrowser.InitializeImGui(gameEngine->GetWindow().GetSDLWindow(),
-                                gameEngine->GetRenderer().GetSDLRenderer());
+    g_ImGui.Init(gameEngine->GetWindow().GetSDLWindow(),
+                 gameEngine->GetRenderer().GetSDLRenderer());
 
-    fileBrowserState.main_window_width = 1000;
-    fileBrowserState.main_window_height = 800;
+    fileBrowserState.mainWindowWidth = 1000;
+    fileBrowserState.mainWindowHeight = 800;
 
     // Populate initial directory contents
 
@@ -94,9 +97,8 @@ SDL_AppResult SDL_AppInit(void **appState, int argc, char *argv[]) {
 SDL_AppResult SDL_AppEvent(void *appState, SDL_Event *event) {
     Engine::Engine *gameEngine = static_cast<Engine::Engine *>(appState);
 
-    // Process ImGui events for the file browser
-    extern Engine::FileBrowser fileBrowser;
-    fileBrowser.ProcessEvent(event);
+    // Process ImGui events
+    g_ImGui.ProcessEvent(event);
 
     if (event->type == SDL_EVENT_QUIT || event->type == SDL_EVENT_TERMINATING) {
         SPDLOG_INFO("Received SDL_EVENT_QUIT or SDL_EVENT_TERMINATING. Exiting "
@@ -120,7 +122,10 @@ SDL_AppResult SDL_AppIterate(void *appState) {
     SPDLOG_DEBUG("Rendering all objects.");
     gameEngine->GetRenderManager().RenderAll(gameEngine->GetRenderer());
 
+    g_ImGui.BeginFrame();
+    Engine::TopBar::Render();
     fileBrowser.Render(fileBrowserState);
+    g_ImGui.EndFrame();
 
     SPDLOG_DEBUG("Presenting rendered frame.");
     gameEngine->GetRenderer().Present();
@@ -135,7 +140,7 @@ void SDL_AppQuit(void *appState, SDL_AppResult result) {
     if (gameEngine != nullptr) {
         SPDLOG_INFO("Shutting down game engine.");
 
-        fileBrowser.ShutdownImGui();
+        g_ImGui.ShutDown();
 
         gameEngine->Shutdown();
         SPDLOG_INFO("Game engine shutdown completed.");
