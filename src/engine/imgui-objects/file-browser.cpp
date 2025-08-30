@@ -1,37 +1,35 @@
+#include <algorithm>
 #include <engine/imgui-objects/file-browser.hpp>
 #include <imgui.h>
 #include <iostream>
-
 namespace Engine {
 
 void FileBrowser::Initialize() {
-    // can be used to set directory using top bar
+    // can be used to set directory using top bar like vscode does with a button
+    // in the area
 }
 
 void FileBrowser::UpdateOnWindowResize(FileBrowserState &state, int w, int h) {
     state.mainWindowWidth = w;
     state.mainWindowHeight = h;
     state.mainwindowresize = true;
-
-    // Example: keep 40% width, 60% height
+    // 40% width, 60% height
     state.filebrowserWidth = 0.4f * static_cast<float>(w);
     state.filebrowserHeight = 0.6f * static_cast<float>(h);
 }
-
-void FileBrowser::PopulateDirectoryContents(FileBrowserState &state) {
-    if (state.current_directory.empty()) {
-        state.current_directory = fs::current_path().string();
-    }
-    std::vector<fs::directory_entry> new_contents;
+bool FileBrowser::SetRootDirectory(FileBrowserState &state,
+                                   const std::string &path) {
     try {
-        for (const auto &entry :
-             fs::directory_iterator(state.current_directory)) {
-            new_contents.push_back(entry);
-        }
-        state.directory_contents = std::move(new_contents);
+        fs::path p(path);
+        if (path.empty() || !fs::exists(p) || !fs::is_directory(p))
+            return false;
+        state.root_directory = fs::canonical(p).string();
+        state.has_root = true;
+        state.selected_path.clear();
+        return true;
     } catch (const fs::filesystem_error &e) {
-        std::cerr << "Error accessing directory: " << e.what() << std::endl;
-        state.directory_contents.clear();
+        std::cerr << "SetRootDirectory error: " << e.what() << std::endl;
+        return false;
     }
 }
 
@@ -40,13 +38,68 @@ void FileBrowser::OpenFile(const std::string &path) {
     // Opening file logic
 }
 
-void FileBrowser::Render(FileBrowserState &state) {
-    // ensure contents are available
-    if (state.directory_contents.empty()) {
-        PopulateDirectoryContents(state);
+void FileBrowser::RenderDirectoryNode(FileBrowserState &state,
+                                      const fs::path &dirPath, int depth) {
+    // Collect entries (dirs first, then files)
+    std::vector<fs::directory_entry> entries;
+    try {
+        for (const auto &entry : fs::directory_iterator(dirPath)) {
+            entries.push_back(entry);
+        }
+    } catch (const fs::filesystem_error &e) {
+        ImGui::TextDisabled("  <error: %s>", e.what());
+        return;
     }
 
-    // Size/pos hints (use FirstUseEver so user can resize later)
+    std::sort(entries.begin(), entries.end(),
+              [](const fs::directory_entry &a, const fs::directory_entry &b) {
+                  bool ad = a.is_directory();
+                  bool bd = b.is_directory();
+                  if (ad != bd)
+                      return ad > bd; // dirs first
+                  return a.path().filename().string() <
+                         b.path().filename().string();
+              });
+
+    for (auto &entry : entries) {
+        const fs::path &p = entry.path();
+        std::string name = p.filename().string();
+        bool isDir = entry.is_directory();
+
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanAvailWidth;
+        if (!isDir)
+            flags |=
+                ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+        if (state.selected_path == p.string())
+            flags |= ImGuiTreeNodeFlags_Selected;
+
+        bool open = false;
+        if (isDir) {
+            open = ImGui::TreeNodeEx((name + "##" + p.string()).c_str(), flags);
+        } else {
+            ImGui::TreeNodeEx((name + "##" + p.string()).c_str(), flags);
+        }
+
+        if (ImGui::IsItemClicked()) {
+            state.selected_path = p.string();
+            if (!isDir) {
+                OpenFile(p.string());
+            }
+        }
+
+        if (open && isDir) {
+            // Limit depth if desired (optional)
+            if (depth < 64) {
+                RenderDirectoryNode(state, p, depth + 1);
+            } else {
+                ImGui::TextDisabled("  <max depth reached>");
+            }
+            ImGui::TreePop();
+        }
+    }
+}
+
+void FileBrowser::Render(FileBrowserState &state) {
     if (state.mainwindowresize) {
         ImGui::SetNextWindowSize(
             ImVec2(state.filebrowserWidth, state.filebrowserHeight),
@@ -56,70 +109,44 @@ void FileBrowser::Render(FileBrowserState &state) {
         ImGui::SetNextWindowSize(
             ImVec2(state.filebrowserWidth, state.filebrowserHeight),
             ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowPos(ImVec2(0, 20),
-                                ImGuiCond_FirstUseEver); // below main menu bar
+        ImGui::SetNextWindowPos(ImVec2(0, 20), ImGuiCond_FirstUseEver);
     }
-    ImGui::SetNextWindowSizeConstraints(ImVec2(50, 50),
+    ImGui::SetNextWindowSizeConstraints(ImVec2(120, 120),
                                         ImVec2(FLT_MAX, FLT_MAX));
 
     if (ImGui::Begin("File Browser", nullptr, ImGuiWindowFlags_NoCollapse)) {
-        // Navigation row
-        if (ImGui::Button("Go Back")) {
-            fs::path p = state.current_directory;
-            if (p.has_parent_path()) {
-                auto parent = p.parent_path();
-                if (parent != p) {
-                    state.current_directory = parent.string();
-                    PopulateDirectoryContents(state);
-                }
+        if (!state.has_root) {
+            ImGui::TextWrapped(
+                "No root directory set.\nUse File > Open Root... in the top "
+                "bar to pick one.");
+        } else {
+            ImGui::TextWrapped("Root: %s", state.root_directory.c_str());
+            if (!state.selected_path.empty()) {
+                ImGui::TextWrapped("Selected: %s", state.selected_path.c_str());
             }
-        }
-        ImGui::SameLine();
-        ImGui::TextWrapped("Current: %s", state.current_directory.c_str());
-        ImGui::Separator();
+            ImGui::Separator();
 
-        if (ImGui::BeginChild("FileListRegion", ImVec2(0, 0), true,
-                              ImGuiWindowFlags_HorizontalScrollbar)) {
-            std::string selected_dir;
-            for (const auto &entry : state.directory_contents) {
-                std::string filename = entry.path().filename().string();
-                std::string label;
+            // Draw tree starting at root
+            fs::path root(state.root_directory);
+            // root is first node
+            ImGuiTreeNodeFlags rootFlags = ImGuiTreeNodeFlags_SpanAvailWidth;
+            if (state.selected_path == state.root_directory)
+                rootFlags |= ImGuiTreeNodeFlags_Selected;
 
-                if (entry.is_directory())
-                    label = "[D] " + filename;
-                else if (entry.is_regular_file())
-                    label = "[F] " + filename;
-                else
-                    label = "[?] " + filename;
+            std::string rootLabel =
+                (root.filename().string().empty() ? root.string()
+                                                  : root.filename().string()) +
+                std::string("##") + state.root_directory;
+            bool rootOpen = ImGui::TreeNodeEx(rootLabel.c_str(), rootFlags);
 
-                label += "##" + entry.path().string(); // unique ID
-
-                if (ImGui::Selectable(label.c_str())) {
-                    if (entry.is_directory()) {
-                        selected_dir = entry.path().string();
-                    } else if (entry.is_regular_file()) {
-                        OpenFile(entry.path().string());
-                    }
-                }
+            if (ImGui::IsItemClicked()) {
+                state.selected_path = state.root_directory;
             }
 
-            if (!selected_dir.empty()) {
-                try {
-                    if (fs::exists(selected_dir) &&
-                        fs::is_directory(selected_dir)) {
-                        state.current_directory = selected_dir;
-                        PopulateDirectoryContents(state);
-                    } else {
-                        PopulateDirectoryContents(state); // refresh
-                    }
-                } catch (const fs::filesystem_error &e) {
-                    std::cerr << "Error accessing directory: " << e.what()
-                              << std::endl;
-                    PopulateDirectoryContents(state);
-                }
+            if (rootOpen) {
+                RenderDirectoryNode(state, root, 0);
+                ImGui::TreePop();
             }
-
-            ImGui::EndChild();
         }
     }
     ImGui::End();

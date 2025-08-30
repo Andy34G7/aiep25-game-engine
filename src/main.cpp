@@ -123,7 +123,7 @@ SDL_AppResult SDL_AppIterate(void *appState) {
     gameEngine->GetRenderManager().RenderAll(gameEngine->GetRenderer());
 
     g_ImGui.BeginFrame();
-    Engine::TopBar::Render();
+    Engine::TopBar::Render(fileBrowser, fileBrowserState);
     fileBrowser.Render(fileBrowserState);
     g_ImGui.EndFrame();
 
